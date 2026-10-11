@@ -1,0 +1,469 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  CUSTOMER
+  TECHNICIAN
+  MANAGER
+  SUPER_ADMIN
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  CANCELLED
+  CHECKED_IN
+  COMPLETED
+  NO_SHOW
+}
+
+enum WorkStatus {
+  RECEIVED
+  INSPECTION
+  AWAITING_ESTIMATE_APPROVAL
+  APPROVED
+  IN_PROGRESS
+  QUALITY_CHECK
+  READY_FOR_COLLECTION
+  DELIVERED
+  CLOSED
+  CANCELLED
+}
+
+enum EstimateStatus {
+  SENT
+  APPROVED
+  REJECTED
+  SUPERSEDED
+}
+
+model User {
+  id                 String             @id @default(uuid())
+  name               String
+  email              String             @unique
+  emailVerified      Boolean            @default(false)
+  image              String?
+  phone              String             @default("")
+  role               Role               @default(CUSTOMER)
+  active             Boolean            @default(true)
+  emailNotifications Boolean            @default(true)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  sessions           Session[]
+  accounts           Account[]
+  memberships        Membership[]
+  vehicles           Vehicle[]
+  appointments       Appointment[]
+  assignments        WorkOrder[]        @relation("Technician")
+  approvals          EstimateApproval[]
+  notifications      Notification[]
+  activities         ActivityLog[]
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+model RateLimit {
+  id          String @id @default(uuid())
+  key         String @unique
+  count       Int
+  lastRequest BigInt
+}
+
+model ServiceCenter {
+  id           String          @id @default(uuid())
+  name         String
+  description  String          @default("")
+  address      String
+  district     String
+  province     String          @default("Western")
+  phone        String
+  email        String
+  timezone     String          @default("Asia/Colombo")
+  active       Boolean         @default(true)
+  openHour     Int             @default(8)
+  closeHour    Int             @default(17)
+  openDays     Int[]           @default([1, 2, 3, 4, 5, 6])
+  capacity     Int             @default(3)
+  closures     String[]        @default([])
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  memberships  Membership[]
+  services     Service[]
+  appointments Appointment[]
+  workOrders   WorkOrder[]
+  parts        InventoryPart[]
+  activities   ActivityLog[]
+}
+
+model Membership {
+  id              String        @id @default(uuid())
+  userId          String
+  centerId        String
+  role            Role
+  active          Boolean       @default(true)
+  specializations String        @default("")
+  createdAt       DateTime      @default(now())
+  user            User          @relation(fields: [userId], references: [id])
+  center          ServiceCenter @relation(fields: [centerId], references: [id])
+
+  @@unique([userId, centerId])
+  @@index([centerId, role, active])
+}
+
+model Vehicle {
+  id             String                @id @default(uuid())
+  ownerId        String
+  owner          User                  @relation(fields: [ownerId], references: [id])
+  registration   String                @unique
+  make           String
+  model          String
+  year           Int
+  category       String
+  fuel           String
+  transmission   String
+  color          String                @default("")
+  vin            String?
+  engineNumber   String?
+  mileage        Int
+  notes          String                @default("")
+  archived       Boolean               @default(false)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  mileageRecords MileageRecord[]
+  appointments   Appointment[]
+  maintenance    MaintenanceRecord[]
+  reminders      MaintenanceReminder[]
+
+  @@index([ownerId, archived])
+}
+
+model MileageRecord {
+  id        String   @id @default(uuid())
+  vehicleId String
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id])
+  mileage   Int
+  note      String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([vehicleId, createdAt])
+}
+
+model Service {
+  id             String        @id @default(uuid())
+  centerId       String
+  center         ServiceCenter @relation(fields: [centerId], references: [id])
+  name           String
+  category       String
+  description    String        @default("")
+  duration       Int           @default(60)
+  startingPrice  Int           @default(0)
+  intervalKm     Int?
+  intervalMonths Int?
+  active         Boolean       @default(true)
+  appointments   Appointment[]
+
+  @@index([centerId, active])
+}
+
+model Appointment {
+  id           String            @id @default(uuid())
+  customerId   String
+  customer     User              @relation(fields: [customerId], references: [id])
+  vehicleId    String
+  vehicle      Vehicle           @relation(fields: [vehicleId], references: [id])
+  centerId     String
+  center       ServiceCenter     @relation(fields: [centerId], references: [id])
+  serviceId    String
+  service      Service           @relation(fields: [serviceId], references: [id])
+  startsAt     DateTime
+  endsAt       DateTime
+  description  String
+  managerNotes String            @default("")
+  status       AppointmentStatus @default(PENDING)
+  requestKey   String            @unique
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  workOrder    WorkOrder?
+
+  @@index([centerId, startsAt, status])
+  @@index([customerId, startsAt])
+  @@index([vehicleId, startsAt])
+}
+
+model WorkOrder {
+  id            String                   @id @default(uuid())
+  appointmentId String                   @unique
+  appointment   Appointment              @relation(fields: [appointmentId], references: [id])
+  centerId      String
+  center        ServiceCenter            @relation(fields: [centerId], references: [id])
+  technicianId  String?
+  technician    User?                    @relation("Technician", fields: [technicianId], references: [id])
+  status        WorkStatus               @default(RECEIVED)
+  notes         String                   @default("")
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+  completedAt   DateTime?
+  tasks         WorkOrderTask[]
+  history       WorkOrderStatusHistory[]
+  inspections   Inspection[]
+  estimates     Estimate[]
+  partUsage     PartUsage[]
+  labor         LaborEntry[]
+  invoice       Invoice?
+  maintenance   MaintenanceRecord?
+
+  @@index([centerId, status])
+  @@index([technicianId, status])
+}
+
+model WorkOrderTask {
+  id          String    @id @default(uuid())
+  workOrderId String
+  workOrder   WorkOrder @relation(fields: [workOrderId], references: [id])
+  title       String
+  done        Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+}
+
+model WorkOrderStatusHistory {
+  id          String     @id @default(uuid())
+  workOrderId String
+  workOrder   WorkOrder  @relation(fields: [workOrderId], references: [id])
+  status      WorkStatus
+  note        String
+  createdAt   DateTime   @default(now())
+
+  @@index([workOrderId, createdAt])
+}
+
+model Inspection {
+  id          String    @id @default(uuid())
+  workOrderId String
+  workOrder   WorkOrder @relation(fields: [workOrderId], references: [id])
+  authorId    String
+  mileage     Int
+  findings    String
+  severity    String
+  checklist   Json
+  createdAt   DateTime  @default(now())
+}
+
+model Estimate {
+  id          String            @id @default(uuid())
+  workOrderId String
+  workOrder   WorkOrder         @relation(fields: [workOrderId], references: [id])
+  version     Int
+  status      EstimateStatus    @default(SENT)
+  discount    Int               @default(0)
+  taxBps      Int               @default(0)
+  subtotal    Int
+  tax         Int
+  total       Int
+  notes       String            @default("")
+  expiresAt   DateTime
+  createdAt   DateTime          @default(now())
+  items       EstimateItem[]
+  approval    EstimateApproval?
+
+  @@unique([workOrderId, version])
+}
+
+model EstimateItem {
+  id          String   @id @default(uuid())
+  estimateId  String
+  estimate    Estimate @relation(fields: [estimateId], references: [id])
+  description String
+  kind        String
+  quantity    Int
+  unitPrice   Int
+}
+
+model EstimateApproval {
+  id         String   @id @default(uuid())
+  estimateId String   @unique
+  estimate   Estimate @relation(fields: [estimateId], references: [id])
+  customerId String
+  customer   User     @relation(fields: [customerId], references: [id])
+  approved   Boolean
+  createdAt  DateTime @default(now())
+}
+
+model InventoryPart {
+  id           String              @id @default(uuid())
+  centerId     String
+  center       ServiceCenter       @relation(fields: [centerId], references: [id])
+  sku          String
+  name         String
+  cost         Int
+  price        Int
+  quantity     Int                 @default(0)
+  reorderLevel Int                 @default(5)
+  supplier     String              @default("")
+  active       Boolean             @default(true)
+  movements    InventoryMovement[]
+  usage        PartUsage[]
+
+  @@unique([centerId, sku])
+}
+
+model InventoryMovement {
+  id         String        @id @default(uuid())
+  partId     String
+  part       InventoryPart @relation(fields: [partId], references: [id])
+  delta      Int
+  reason     String
+  actorId    String
+  requestKey String        @unique
+  createdAt  DateTime      @default(now())
+}
+
+model PartUsage {
+  id          String        @id @default(uuid())
+  workOrderId String
+  workOrder   WorkOrder     @relation(fields: [workOrderId], references: [id])
+  partId      String
+  part        InventoryPart @relation(fields: [partId], references: [id])
+  quantity    Int
+  createdAt   DateTime      @default(now())
+}
+
+model LaborEntry {
+  id          String    @id @default(uuid())
+  workOrderId String
+  workOrder   WorkOrder @relation(fields: [workOrderId], references: [id])
+  description String
+  minutes     Int
+  createdAt   DateTime  @default(now())
+}
+
+model Invoice {
+  id          String    @id @default(uuid())
+  number      String    @unique
+  workOrderId String    @unique
+  workOrder   WorkOrder @relation(fields: [workOrderId], references: [id])
+  snapshot    Json
+  total       Int
+  voided      Boolean   @default(false)
+  voidReason  String?
+  createdAt   DateTime  @default(now())
+  payments    Payment[]
+}
+
+model Payment {
+  id         String   @id @default(uuid())
+  invoiceId  String
+  invoice    Invoice  @relation(fields: [invoiceId], references: [id])
+  amount     Int
+  method     String
+  reference  String
+  requestKey String   @unique
+  createdAt  DateTime @default(now())
+}
+
+model MaintenanceRecord {
+  id          String    @id @default(uuid())
+  vehicleId   String
+  vehicle     Vehicle   @relation(fields: [vehicleId], references: [id])
+  workOrderId String    @unique
+  workOrder   WorkOrder @relation(fields: [workOrderId], references: [id])
+  mileage     Int
+  summary     String
+  createdAt   DateTime  @default(now())
+
+  @@index([vehicleId, createdAt])
+}
+
+model MaintenanceReminder {
+  id          String    @id @default(uuid())
+  vehicleId   String
+  vehicle     Vehicle   @relation(fields: [vehicleId], references: [id])
+  sourceKey   String    @unique
+  title       String
+  dueMileage  Int?
+  dueDate     DateTime?
+  explanation String
+  dismissed   Boolean   @default(false)
+  notified    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  @@index([vehicleId, dismissed])
+}
+
+model Notification {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+  title          String
+  message        String
+  href           String
+  read           Boolean   @default(false)
+  emailStatus    String    @default("PENDING")
+  emailAttempts  Int       @default(0)
+  emailClaimedAt DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([userId, read, createdAt])
+}
+
+model ActivityLog {
+  id         String         @id @default(uuid())
+  actorId    String
+  actor      User           @relation(fields: [actorId], references: [id])
+  centerId   String?
+  center     ServiceCenter? @relation(fields: [centerId], references: [id])
+  action     String
+  resourceId String
+  createdAt  DateTime       @default(now())
+
+  @@index([centerId, createdAt])
+}
