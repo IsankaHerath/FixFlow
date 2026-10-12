@@ -235,7 +235,12 @@ export async function workspace(user: Actor, page = 1, search = "") {
         _count: true,
       })
     : [];
-  const availableParts = await db.inventoryPart.findMany({ where: { centerId: { in: centers(user) }, active: true }, select: { id: true, name: true, quantity: true, centerId: true }, take: 100, orderBy: { name: "asc" } });
+  const availableParts = await db.inventoryPart.findMany({
+    where: { centerId: { in: centers(user) }, active: true },
+    select: { id: true, name: true, quantity: true, centerId: true },
+    take: 100,
+    orderBy: { name: "asc" },
+  });
   const distribution = await db.workOrder.groupBy({
     by: ["status"],
     where: workScope(user),
@@ -250,27 +255,35 @@ export async function workspace(user: Actor, page = 1, search = "") {
           jobs: await db.workOrder.count(),
         }
       : null;
-  const monthlyRevenue = managerIds.length ? await db.$queryRaw<{ month: string; amount: number }[]>`
+  const monthlyRevenue = managerIds.length
+    ? await db.$queryRaw<{ month: string; amount: number }[]>`
     SELECT to_char(p."createdAt" AT TIME ZONE 'Asia/Colombo', 'YYYY-MM') AS month,
            (sum(p.amount)::numeric / 100)::float8 AS amount
     FROM "Payment" p JOIN "Invoice" i ON i.id = p."invoiceId"
     JOIN "WorkOrder" w ON w.id = i."workOrderId"
     WHERE w."centerId" IN (${Prisma.join(managerIds)}) AND NOT i.voided
       AND p."createdAt" >= date_trunc('month', NOW()) - INTERVAL '11 months'
-    GROUP BY month ORDER BY month` : [];
-  const monthlyAppointments = managerIds.length ? await db.$queryRaw<{month:string;count:number}[]>`
+    GROUP BY month ORDER BY month`
+    : [];
+  const monthlyAppointments = managerIds.length
+    ? await db.$queryRaw<{ month: string; count: number }[]>`
     SELECT to_char("startsAt" AT TIME ZONE 'Asia/Colombo','YYYY-MM') AS month, count(*)::int AS count
     FROM "Appointment" WHERE "centerId" IN (${Prisma.join(managerIds)})
       AND "startsAt" >= date_trunc('month', NOW()) - INTERVAL '11 months'
       AND "startsAt" < date_trunc('month', NOW()) + INTERVAL '1 month'
-    GROUP BY month ORDER BY month` : [];
-  const balances = managerIds.length ? await db.$queryRaw<{outstanding:number}[]>`
+    GROUP BY month ORDER BY month`
+    : [];
+  const balances = managerIds.length
+    ? await db.$queryRaw<{ outstanding: number }[]>`
     SELECT coalesce(sum(i.total - coalesce(p.paid,0)),0)::float8 AS outstanding FROM "Invoice" i
     JOIN "WorkOrder" w ON w.id=i."workOrderId"
     LEFT JOIN (SELECT "invoiceId",sum(amount) AS paid FROM "Payment" GROUP BY "invoiceId") p ON p."invoiceId"=i.id
-    WHERE NOT i.voided AND w."centerId" IN (${Prisma.join(managerIds)})` : [];
+    WHERE NOT i.voided AND w."centerId" IN (${Prisma.join(managerIds)})`
+    : [];
   return {
-    monthlyRevenue, monthlyAppointments, outstanding: balances[0]?.outstanding ?? 0,
+    monthlyRevenue,
+    monthlyAppointments,
+    outstanding: balances[0]?.outstanding ?? 0,
     availableParts,
     user: {
       id: user.id,
@@ -353,4 +366,37 @@ export async function workDetail(user: Actor, id: string) {
 }
 export type WorkDetailData = Serialized<
   NonNullable<Awaited<ReturnType<typeof workDetail>>>
+>;
+export async function vehicleDetail(user: Actor, id: string) {
+  return db.vehicle.findFirst({
+    where: { id, ...vehicleScope(user) },
+    include: {
+      mileageRecords: { orderBy: { createdAt: "desc" }, take: 50 },
+      maintenance: {
+        where: { workOrder: workScope(user) },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+        include: {
+          workOrder: {
+            include: {
+              center: { select: { name: true } },
+              invoice: { select: { id: true, total: true } },
+            },
+          },
+        },
+      },
+      appointments: {
+        where: appointmentScope(user),
+        orderBy: { startsAt: "desc" },
+        take: 50,
+        include: {
+          service: { select: { name: true } },
+          center: { select: { name: true } },
+        },
+      },
+    },
+  });
+}
+export type VehicleDetailData = Serialized<
+  NonNullable<Awaited<ReturnType<typeof vehicleDetail>>>
 >;

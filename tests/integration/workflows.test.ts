@@ -19,7 +19,7 @@ import {
   stockMovement,
   invoicePdf,
 } from "../../src/server/services/finance";
-import { workDetail } from "../../src/server/services/queries";
+import { workDetail, vehicleDetail } from "../../src/server/services/queries";
 import type { Actor } from "../../src/server/policies";
 const enabled = process.env.RUN_INTEGRATION === "true";
 describe.skipIf(!enabled)("PostgreSQL workflow and tenant isolation", () => {
@@ -181,6 +181,10 @@ describe.skipIf(!enabled)("PostgreSQL workflow and tenant isolation", () => {
   it("persists vehicles and rejects another customer's edits", async () => {
     const v = await db.vehicle.findUniqueOrThrow({ where: { id: vehicleId } });
     expect(v.registration).toBe(`TEST${suffix}`.toUpperCase());
+    expect(await vehicleDetail(other, vehicleId)).toBeNull();
+    expect(
+      (await vehicleDetail(customer, vehicleId))?.mileageRecords,
+    ).toHaveLength(1);
     await expect(
       saveVehicle(other, { ...v, mileage: 51000 }, vehicleId),
     ).rejects.toThrow("Vehicle not found");
@@ -262,11 +266,24 @@ describe.skipIf(!enabled)("PostgreSQL workflow and tenant isolation", () => {
     await expect(
       decideEstimate(tech, first.id, { approved: true }),
     ).rejects.toThrow("not found");
+    await db.estimate.update({
+      where: { id: first.id },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+    await expect(
+      decideEstimate(customer, first.id, { approved: true }),
+    ).rejects.toThrow();
+    await db.estimate.update({
+      where: { id: first.id },
+      data: { expiresAt: new Date(Date.now() + 86400000) },
+    });
     await decideEstimate(customer, first.id, { approved: true });
     const second = await createEstimate(manager, workId, {
       ...input,
       discount: 0,
     });
+    expect((await workDetail(tech, workId))?.estimates).toEqual([]);
+    expect(await workDetail({ ...tech, memberships: [] }, workId)).toBeNull();
     expect(
       (await db.estimate.findUniqueOrThrow({ where: { id: first.id } })).status,
     ).toBe("APPROVED");
@@ -393,5 +410,8 @@ describe.skipIf(!enabled)("PostgreSQL workflow and tenant isolation", () => {
     expect(
       (await db.workOrder.findUniqueOrThrow({ where: { id: workId } })).status,
     ).toBe("CLOSED");
+    expect(
+      (await vehicleDetail(customer, vehicleId))?.maintenance,
+    ).toHaveLength(1);
   });
 });

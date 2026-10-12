@@ -17,7 +17,8 @@ export async function sendMail(to: string, subject: string, text: string) {
       subject,
       text,
     });
-    if (!receipt.accepted?.length) throw new Error("SMTP did not accept the message");
+    if (!receipt.accepted?.length)
+      throw new Error("SMTP did not accept the message");
     return "ACCEPTED" as const;
   }
   if (process.env.NODE_ENV === "production")

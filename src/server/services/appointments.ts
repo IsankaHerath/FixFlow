@@ -55,12 +55,26 @@ export async function book(user: Actor, body: unknown, rescheduleId?: string) {
   if (!rescheduleId) customer(user);
   const input = bookingInput.parse(body);
   return atomic(async (tx) => {
-    const previous = rescheduleId ? await tx.appointment.findFirst({ where: { id: rescheduleId, ...appointmentScope(user) } }) : null;
+    const previous = rescheduleId
+      ? await tx.appointment.findFirst({
+          where: { id: rescheduleId, ...appointmentScope(user) },
+        })
+      : null;
     if (rescheduleId) {
-      check(previous && ["PENDING", "CONFIRMED"].includes(previous.status) && previous.startsAt > new Date(), "This appointment cannot be rescheduled.", 409);
+      check(
+        previous &&
+          ["PENDING", "CONFIRMED"].includes(previous.status) &&
+          previous.startsAt > new Date(),
+        "This appointment cannot be rescheduled.",
+        409,
+      );
       if (previous.customerId !== user.id) {
         manager(user, previous.centerId);
-        check(input.centerId === previous.centerId && input.vehicleId === previous.vehicleId, "Workshop rescheduling must retain the vehicle and center.");
+        check(
+          input.centerId === previous.centerId &&
+            input.vehicleId === previous.vehicleId,
+          "Workshop rescheduling must retain the vehicle and center.",
+        );
       }
     }
     const customerId = previous?.customerId ?? user.id;

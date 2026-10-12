@@ -10,6 +10,8 @@ import {
 } from "./services/queries";
 import { Workspace } from "@/components/workspace";
 import { WorkDetail } from "@/components/work-detail";
+import { VehicleDetail } from "@/components/vehicle-detail";
+import { vehicleDetail } from "./services/queries";
 const allowed: Record<string, string[]> = {
   dashboard: [
     "",
@@ -78,10 +80,24 @@ export async function WorkspacePage({
   const [section = "", id] = slug;
   if (!allowed[base].includes(section) || slug.length > 2) notFound();
   const search = await searchParams;
-  const page = Math.max(1, Math.min(10000, Number(search.page) || 1));
+  const page = Math.max(
+    1,
+    Math.min(10000, Math.trunc(Number(search.page)) || 1),
+  );
   const raw = await workspace(user, page, (search.q ?? "").slice(0, 100));
   const data: WorkspaceData = JSON.parse(JSON.stringify(raw));
   if (id) {
+    if (section === "vehicles") {
+      const vehicle = await vehicleDetail(user, id);
+      if (!vehicle) notFound();
+      return (
+        <VehicleDetail
+          data={data}
+          vehicle={JSON.parse(JSON.stringify(vehicle))}
+          base={`/${base}`}
+        />
+      );
+    }
     if (!["repairs", "work-orders", "jobs"].includes(section)) notFound();
     const work = await workDetail(user, id);
     if (!work) notFound();

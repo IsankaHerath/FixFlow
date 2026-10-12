@@ -45,26 +45,28 @@ enum EstimateStatus {
 }
 
 model User {
-  id                 String             @id @default(uuid())
-  name               String
-  email              String             @unique
-  emailVerified      Boolean            @default(false)
-  image              String?
-  phone              String             @default("")
-  role               Role               @default(CUSTOMER)
-  active             Boolean            @default(true)
-  emailNotifications Boolean            @default(true)
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-  sessions           Session[]
-  accounts           Account[]
-  memberships        Membership[]
-  vehicles           Vehicle[]
-  appointments       Appointment[]
-  assignments        WorkOrder[]        @relation("Technician")
-  approvals          EstimateApproval[]
-  notifications      Notification[]
-  activities         ActivityLog[]
+  id                  String              @id @default(uuid())
+  name                String
+  email               String              @unique
+  emailVerified       Boolean             @default(false)
+  image               String?
+  phone               String              @default("")
+  role                Role                @default(CUSTOMER)
+  active              Boolean             @default(true)
+  emailNotifications  Boolean             @default(true)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  sessions            Session[]
+  accounts            Account[]
+  memberships         Membership[]
+  vehicles            Vehicle[]
+  appointments        Appointment[]
+  assignments         WorkOrder[]         @relation("Technician")
+  approvals           EstimateApproval[]
+  notifications       Notification[]
+  activities          ActivityLog[]
+  authoredInspections Inspection[]        @relation("InspectionAuthor")
+  stockMovements      InventoryMovement[] @relation("StockActor")
 }
 
 model Session {
@@ -130,6 +132,7 @@ model ServiceCenter {
   email        String
   timezone     String          @default("Asia/Colombo")
   active       Boolean         @default(true)
+  approvedAt   DateTime?
   openHour     Int             @default(8)
   closeHour    Int             @default(17)
   openDays     Int[]           @default([1, 2, 3, 4, 5, 6])
@@ -291,6 +294,7 @@ model Inspection {
   workOrderId String
   workOrder   WorkOrder @relation(fields: [workOrderId], references: [id])
   authorId    String
+  author      User      @relation("InspectionAuthor", fields: [authorId], references: [id])
   mileage     Int
   findings    String
   severity    String
@@ -363,6 +367,7 @@ model InventoryMovement {
   delta      Int
   reason     String
   actorId    String
+  actor      User          @relation("StockActor", fields: [actorId], references: [id])
   requestKey String        @unique
   createdAt  DateTime      @default(now())
 }

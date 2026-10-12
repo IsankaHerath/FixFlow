@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
+import { parseMoney, moneyInput } from "@/lib/money";
 export async function mutate(url: string, body: unknown, method = "POST") {
   const response = await fetch(url, {
     method,
@@ -60,16 +61,18 @@ export function ActionForm({
             setError("");
             const form = new FormData(e.currentTarget);
             const data: Record<string, unknown> = { ...extra };
-            for (const f of fields)
-              data[f.name] =
-                f.type === "number"
-                  ? form.get(f.name) === ""
-                    ? null
-                    : Number(form.get(f.name))
-                  : f.type === "checkbox"
-                    ? form.get(f.name) === "on"
-                    : String(form.get(f.name) ?? "");
             try {
+              for (const f of fields)
+                data[f.name] =
+                  f.type === "money"
+                    ? parseMoney(String(form.get(f.name) ?? ""))
+                    : f.type === "number"
+                      ? form.get(f.name) === ""
+                        ? null
+                        : Number(form.get(f.name))
+                      : f.type === "checkbox"
+                        ? form.get(f.name) === "on"
+                        : String(form.get(f.name) ?? "");
               await mutate(
                 endpoint,
                 transform ? transform(data) : data,
@@ -126,8 +129,13 @@ export function ActionForm({
                 ) : (
                   <input
                     name={f.name}
-                    type={f.type ?? "text"}
-                    defaultValue={String(f.value ?? "")}
+                    type={f.type === "money" ? "text" : (f.type ?? "text")}
+                    inputMode={f.type === "money" ? "decimal" : undefined}
+                    defaultValue={
+                      f.type === "money" && typeof f.value === "number"
+                        ? moneyInput(f.value)
+                        : String(f.value ?? "")
+                    }
                     required={f.required !== false}
                     min={f.min}
                     max={f.max}

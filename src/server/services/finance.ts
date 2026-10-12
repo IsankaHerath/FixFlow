@@ -28,6 +28,10 @@ export async function stockMovement(
   return atomic(async (tx) => {
     const part = await tx.inventoryPart.findUnique({ where: { id: partId } });
     check(part, "Part not found.", 404);
+    check(
+      part.active || !input.workOrderId,
+      "This part is inactive and cannot be consumed.",
+    );
     if (input.workOrderId) {
       const work = await accessibleWork(tx, user, input.workOrderId, true);
       check(
@@ -229,18 +233,31 @@ export async function invoicePdf(user: Actor, id: string) {
   let page = pdf.addPage([595, 842]);
   let y = 790;
   const line = (text: string, size = 11, strong = false) => {
-    if (y < 60) {
-      page = pdf.addPage([595, 842]);
-      y = 790;
+    const selectedFont = strong ? bold : font;
+    const sanitized = text.replace(/[^\x20-\x7E]/g, " ");
+    const rows: string[] = [];
+    let row = "";
+    for (const char of sanitized) {
+      if (selectedFont.widthOfTextAtSize(row + char, size) > 505) {
+        rows.push(row);
+        row = char;
+      } else row += char;
     }
-    page.drawText(text.replace(/[^\x20-\x7E]/g, " ").slice(0, 100), {
-      x: 45,
-      y,
-      size,
-      font: strong ? bold : font,
-      color: rgb(0.06, 0.13, 0.2),
-    });
-    y -= size + 13;
+    rows.push(row);
+    for (const content of rows) {
+      if (y < 60) {
+        page = pdf.addPage([595, 842]);
+        y = 790;
+      }
+      page.drawText(content, {
+        x: 45,
+        y,
+        size,
+        font: strong ? bold : font,
+        color: rgb(0.06, 0.13, 0.2),
+      });
+      y -= size + 13;
+    }
   };
   line("FIXFLOW / SERVICE INVOICE", 22, true);
   line(invoice.number, 13, true);

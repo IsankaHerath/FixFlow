@@ -60,6 +60,35 @@ async function handle(req: NextRequest, context: Context) {
         ),
       });
     const user = await actor(req.headers);
+    if (resource === "reports" && id === "export" && read) {
+      check(
+        centers(user, "MANAGER").length > 0,
+        "Center manager access required.",
+        403,
+      );
+      const report = await workspace(user);
+      const months = [
+        ...new Set([
+          ...report.monthlyRevenue.map((r) => r.month),
+          ...report.monthlyAppointments.map((r) => r.month),
+        ]),
+      ].sort();
+      const csv = [
+        "Month,Recorded revenue (LKR),Appointments",
+        ...months.map(
+          (month) =>
+            `${month},${(report.monthlyRevenue.find((r) => r.month === month)?.amount ?? 0).toFixed(2)},${report.monthlyAppointments.find((r) => r.month === month)?.count ?? 0}`,
+        ),
+      ].join("\r\n");
+      return new Response(csv + "\r\n", {
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition":
+            'attachment; filename="fixflow-monthly-report.csv"',
+          "Cache-Control": "private, no-store",
+        },
+      });
+    }
     const body: unknown =
       read || req.method === "DELETE" ? {} : await req.json();
     let data: unknown;
@@ -161,6 +190,15 @@ async function handle(req: NextRequest, context: Context) {
       data = await db.inventoryPart.create({
         data: { ...partInput.parse(body), centerId },
       });
+    } else if (resource === "inventory" && id && req.method === "PATCH") {
+      const part = await db.inventoryPart.findUnique({ where: { id } });
+      check(part, "Part not found.", 404);
+      manager(user, part.centerId);
+      const input = partInput.extend({ active: z.boolean() }).parse(body);
+      data = await atomic(async (tx) => {
+        await audit(tx, user.id, "PART_UPDATED", id, part.centerId);
+        return tx.inventoryPart.update({ where: { id }, data: input });
+      });
     } else if (
       resource === "services" &&
       ["POST", "PATCH"].includes(req.method)
@@ -188,13 +226,35 @@ async function handle(req: NextRequest, context: Context) {
       data = await db.membership.update({ where: { id }, data: input });
     } else if (resource === "centers" && req.method === "POST") {
       admin(user);
-      data = await db.serviceCenter.create({ data: centerInput.parse(body) });
+      data = await atomic(async (tx) => {
+        const center = await tx.serviceCenter.create({
+          data: { ...centerInput.parse(body), active: false },
+        });
+        await audit(
+          tx,
+          user.id,
+          "CENTER_CREATED_PENDING_APPROVAL",
+          center.id,
+          center.id,
+        );
+        return center;
+      });
     } else if (resource === "centers" && id && req.method === "PATCH") {
       if (user.role === "SUPER_ADMIN") {
         const input = z.object({ active: z.boolean() }).parse(body);
         data = await atomic(async (tx) => {
           await audit(tx, user.id, "CENTER_STATUS", id, id);
-          return tx.serviceCenter.update({ where: { id }, data: input });
+          const current = await tx.serviceCenter.findUnique({ where: { id } });
+          check(current, "Center not found.", 404);
+          return tx.serviceCenter.update({
+            where: { id },
+            data: {
+              ...input,
+              ...(input.active && !current.approvedAt
+                ? { approvedAt: new Date() }
+                : {}),
+            },
+          });
         });
       } else {
         manager(user, id);

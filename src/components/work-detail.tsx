@@ -11,6 +11,7 @@ import { Badge, Empty } from "./workspace";
 import { ActionForm, ActionButton, mutate } from "./forms";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
+import { parseMoney } from "@/lib/money";
 const steps: Record<string, string[]> = {
   RECEIVED: ["INSPECTION", "CANCELLED"],
   INSPECTION: ["CANCELLED"],
@@ -26,7 +27,7 @@ function EstimateForm({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [items, setItems] = useState([
-    { description: "", kind: "LABOR", quantity: 1, unitPrice: 0 },
+    { description: "", kind: "LABOR", quantity: 1, unitPrice: "0.00" },
   ]);
   const router = useRouter();
   return (
@@ -52,8 +53,11 @@ function EstimateForm({ id }: { id: string }) {
             const form = new FormData(e.currentTarget);
             try {
               await mutate(`/api/work-orders/${id}/estimate`, {
-                items,
-                discount: Number(form.get("discount")),
+                items: items.map((i) => ({
+                  ...i,
+                  unitPrice: parseMoney(i.unitPrice),
+                })),
+                discount: parseMoney(String(form.get("discount"))),
                 taxBps: Number(form.get("taxBps")),
                 notes: String(form.get("notes")),
                 expiresAt: new Date(
@@ -127,9 +131,10 @@ function EstimateForm({ id }: { id: string }) {
                     />
                   </label>
                   <label className="field">
-                    Unit price (LKR minor units)
+                    Unit price (LKR)
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       min={0}
                       required
                       value={item.unitPrice}
@@ -137,7 +142,7 @@ function EstimateForm({ id }: { id: string }) {
                         setItems(
                           items.map((x, i) =>
                             i === index
-                              ? { ...x, unitPrice: Number(e.target.value) }
+                              ? { ...x, unitPrice: e.target.value }
                               : x,
                           ),
                         )
@@ -165,7 +170,12 @@ function EstimateForm({ id }: { id: string }) {
             onClick={() =>
               setItems([
                 ...items,
-                { description: "", kind: "PART", quantity: 1, unitPrice: 0 },
+                {
+                  description: "",
+                  kind: "PART",
+                  quantity: 1,
+                  unitPrice: "0.00",
+                },
               ])
             }
           >
@@ -174,10 +184,11 @@ function EstimateForm({ id }: { id: string }) {
           </Button>
           <div className="form-grid">
             <label className="field">
-              Discount (minor units)
+              Discount (LKR)
               <input
                 name="discount"
-                type="number"
+                type="text"
+                inputMode="decimal"
                 min={0}
                 defaultValue={0}
                 required

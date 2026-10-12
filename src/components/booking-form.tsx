@@ -25,7 +25,7 @@ export function BookingForm({
   const [loaded, setLoaded] = useState(false);
   const [key, setKey] = useState("");
   const router = useRouter();
-  const previous = data.appointments.find(a=>a.id===appointmentId);
+  const previous = data.appointments.find((a) => a.id === appointmentId);
   const workshopReschedule = !!previous && previous.customerId !== data.user.id;
   const center = data.centers.find((c) => c.id === centerId);
   const service = center?.services.find((s) => s.id === serviceId);
@@ -82,12 +82,24 @@ export function BookingForm({
         >
           <label className="field">
             Your vehicle
-            <select aria-label="Your vehicle" name="vehicleId" required defaultValue={previous?.vehicleId ?? ""}>
+            <select
+              aria-label="Your vehicle"
+              name="vehicleId"
+              required
+              defaultValue={previous?.vehicleId ?? ""}
+            >
               <option value="" disabled>
                 Select a vehicle
               </option>
-              {(workshopReschedule && previous ? [previous.vehicle] : data.vehicles)
-                .filter((v) => !v.archived && (workshopReschedule || v.ownerId === data.user.id))
+              {(workshopReschedule && previous
+                ? [previous.vehicle]
+                : data.vehicles
+              )
+                .filter(
+                  (v) =>
+                    !v.archived &&
+                    (workshopReschedule || v.ownerId === data.user.id),
+                )
                 .map((v) => (
                   <option key={v.id} value={v.id}>
                     {v.registration} — {v.make} {v.model}
@@ -110,11 +122,15 @@ export function BookingForm({
               }}
             >
               <option value="">Choose a center</option>
-              {data.centers.filter(c=>!workshopReschedule || c.id===previous?.centerId).map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} · {c.district}
-                </option>
-              ))}
+              {data.centers
+                .filter(
+                  (c) => !workshopReschedule || c.id === previous?.centerId,
+                )
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} · {c.district}
+                  </option>
+                ))}
             </select>
           </label>
           <label className="field">

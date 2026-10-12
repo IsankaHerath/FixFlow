@@ -206,68 +206,78 @@ export function Workspace({
   );
   const vehicleCards = (limit?: number) => (
     <div className="cards-grid">
-      {data.vehicles.slice(0, limit).map((v) => (
-        <article className="vehicle-card" key={v.id}>
-          <div className="vehicle-card-icon">
-            <CarFront size={55} strokeWidth={1.3} />
-          </div>
-          <h3>
-            {v.make} {v.model}
-          </h3>
-          <p>
-            {v.year} · {v.fuel} · {v.transmission}
-          </p>
-          <div className="vehicle-card-footer">
-            <strong>{v.registration}</strong>
-            <span>{v.mileage.toLocaleString()} km</span>
-          </div>
-          {!limit && (
-            <div className="inline-actions" style={{ marginTop: 15 }}>
-              {v.archived ? (
-                <Badge value="ARCHIVED" />
-              ) : isCustomer ? (
-                <>
-                  <ActionForm
-                    title="Edit vehicle"
-                    trigger="Edit details"
-                    endpoint={`/api/vehicles/${v.id}`}
-                    method="PATCH"
-                    fields={vehicleFields.map((f) => ({
-                      ...f,
-                      value: v[f.name as keyof typeof v] as string | number,
-                    }))}
-                  />
-                  <ActionButton
-                    endpoint={`/api/vehicles/${v.id}`}
-                    method="DELETE"
-                    confirm
-                  >
-                    Archive
-                  </ActionButton>
-                </>
-              ) : (
-                <ActionForm
-                  title="Correct mileage"
-                  endpoint={`/api/mileage-correction/${v.id}`}
-                  fields={[
-                    {
-                      name: "mileage",
-                      label: "Corrected mileage",
-                      type: "number",
-                      min: 0,
-                    },
-                    {
-                      name: "reason",
-                      label: "Documented correction reason",
-                      type: "textarea",
-                    },
-                  ]}
-                />
-              )}
+      {data.vehicles
+        .filter((v) => !limit || !v.archived)
+        .slice(0, limit)
+        .map((v) => (
+          <article className="vehicle-card" key={v.id}>
+            <div className="vehicle-card-icon">
+              <CarFront size={55} strokeWidth={1.3} />
             </div>
-          )}
-        </article>
-      ))}
+            <h3>
+              {v.make} {v.model}
+            </h3>
+            <p>
+              {v.year} · {v.fuel} · {v.transmission}
+            </p>
+            <div className="vehicle-card-footer">
+              <strong>{v.registration}</strong>
+              <span>{v.mileage.toLocaleString()} km</span>
+            </div>
+            <Link
+              className="text-link teal"
+              style={{ marginTop: 12 }}
+              href={`${base}/vehicles/${v.id}`}
+            >
+              Mileage & service records ↗
+            </Link>
+            {!limit && (
+              <div className="inline-actions" style={{ marginTop: 15 }}>
+                {v.archived ? (
+                  <Badge value="ARCHIVED" />
+                ) : isCustomer ? (
+                  <>
+                    <ActionForm
+                      title="Edit vehicle"
+                      trigger="Edit details"
+                      endpoint={`/api/vehicles/${v.id}`}
+                      method="PATCH"
+                      fields={vehicleFields.map((f) => ({
+                        ...f,
+                        value: v[f.name as keyof typeof v] as string | number,
+                      }))}
+                    />
+                    <ActionButton
+                      endpoint={`/api/vehicles/${v.id}`}
+                      method="DELETE"
+                      confirm
+                    >
+                      Archive
+                    </ActionButton>
+                  </>
+                ) : (
+                  <ActionForm
+                    title="Correct mileage"
+                    endpoint={`/api/mileage-correction/${v.id}`}
+                    fields={[
+                      {
+                        name: "mileage",
+                        label: "Corrected mileage",
+                        type: "number",
+                        min: 0,
+                      },
+                      {
+                        name: "reason",
+                        label: "Documented correction reason",
+                        type: "textarea",
+                      },
+                    ]}
+                  />
+                )}
+              </div>
+            )}
+          </article>
+        ))}
     </div>
   );
   const jobList = (limit?: number) =>
@@ -492,7 +502,13 @@ export function Workspace({
           </div>
         </div>
       ) : base === "/technician" ? (
-        <div className="panel"><div className="panel-heading"><h2>Your assigned work</h2><Link href="/technician/jobs">View all jobs ↗</Link></div>{jobList(10)}</div>
+        <div className="panel">
+          <div className="panel-heading">
+            <h2>Your assigned work</h2>
+            <Link href="/technician/jobs">View all jobs ↗</Link>
+          </div>
+          {jobList(10)}
+        </div>
       ) : (
         <div className="dashboard-grid">
           <div>
@@ -712,11 +728,11 @@ export function Workspace({
                             fields={[
                               {
                                 name: "amount",
-                                label: "Amount (LKR minor units)",
-                                type: "number",
+                                label: "Amount (LKR)",
+                                type: "money",
                                 min: 1,
                                 max: balance,
-                                help: "100 minor units = LKR 1.00",
+                                help: `Outstanding: ${money(balance)}`,
                               },
                               {
                                 name: "method",
@@ -801,6 +817,46 @@ export function Workspace({
                     </td>
                     <td>{money(p.price)}</td>
                     <td>
+                      <ActionForm
+                        title="Edit spare part"
+                        endpoint={`/api/inventory/${p.id}`}
+                        method="PATCH"
+                        fields={[
+                          { name: "sku", label: "SKU", value: p.sku },
+                          { name: "name", label: "Part name", value: p.name },
+                          {
+                            name: "cost",
+                            label: "Unit cost (LKR)",
+                            type: "money",
+                            value: p.cost,
+                          },
+                          {
+                            name: "price",
+                            label: "Selling price (LKR)",
+                            type: "money",
+                            value: p.price,
+                          },
+                          {
+                            name: "reorderLevel",
+                            label: "Reorder level",
+                            type: "number",
+                            min: 0,
+                            value: p.reorderLevel,
+                          },
+                          {
+                            name: "supplier",
+                            label: "Supplier",
+                            value: p.supplier,
+                            required: false,
+                          },
+                          {
+                            name: "active",
+                            label: "Available for use",
+                            type: "checkbox",
+                            value: p.active,
+                          },
+                        ]}
+                      />
                       <ActionForm
                         title="Adjust inventory"
                         endpoint={`/api/inventory/${p.id}/movement`}
@@ -901,8 +957,8 @@ export function Workspace({
     },
     {
       name: "startingPrice",
-      label: "Starting price (LKR minor units)",
-      type: "number",
+      label: "Starting price (LKR)",
+      type: "money",
       min: 0,
     },
     {
@@ -1160,8 +1216,55 @@ export function Workspace({
   if (section === "reports")
     body = (
       <div className="dashboard-grid">
-        <div className="panel"><h3>Revenue by month</h3><p className="code-note">Last 12 months · recorded payments in LKR</p>{data.monthlyRevenue.length ? <div className="chart-container"><ResponsiveContainer><BarChart data={data.monthlyRevenue}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="month" tick={{fontSize:10}}/><YAxis tick={{fontSize:10}}/><Tooltip/><Bar dataKey="amount" fill="#128f83" radius={[5,5,0,0]}/></BarChart></ResponsiveContainer></div> : <Empty title="No revenue recorded"/>}</div>
-        <div className="panel"><h3>Appointments by month</h3><p className="code-note">Last 12 months · all booking statuses</p>{data.monthlyAppointments.length ? <div className="chart-container"><ResponsiveContainer><BarChart data={data.monthlyAppointments}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="month" tick={{fontSize:10}}/><YAxis allowDecimals={false} tick={{fontSize:10}}/><Tooltip/><Bar dataKey="count" fill="#456b86" radius={[5,5,0,0]}/></BarChart></ResponsiveContainer></div> : <Empty title="No appointments recorded"/>}<p>Outstanding invoice balance: <strong>{money(data.outstanding)}</strong></p></div>
+        <div className="panel">
+          <h3>Revenue by month</h3>
+          <p className="code-note">Last 12 months · recorded payments in LKR</p>
+          <a
+            className="button button-outline button-sm"
+            href="/api/reports/export"
+            download
+          >
+            Download monthly CSV
+          </a>
+          {data.monthlyRevenue.length ? (
+            <div className="chart-container">
+              <ResponsiveContainer>
+                <BarChart data={data.monthlyRevenue}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip />
+                  <Bar dataKey="amount" fill="#128f83" radius={[5, 5, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <Empty title="No revenue recorded" />
+          )}
+        </div>
+        <div className="panel">
+          <h3>Appointments by month</h3>
+          <p className="code-note">Last 12 months · all booking statuses</p>
+          {data.monthlyAppointments.length ? (
+            <div className="chart-container">
+              <ResponsiveContainer>
+                <BarChart data={data.monthlyAppointments}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#456b86" radius={[5, 5, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <Empty title="No appointments recorded" />
+          )}
+          <p>
+            Outstanding invoice balance:{" "}
+            <strong>{money(data.outstanding)}</strong>
+          </p>
+        </div>
         <div className="panel">
           <h3>Recorded payments by method</h3>
           <p className="code-note">
@@ -1234,7 +1337,15 @@ export function Workspace({
               <p>
                 {c.address} · {c.district}
               </p>
-              <Badge value={c.active ? "ACTIVE" : "SUSPENDED"} />
+              <Badge
+                value={
+                  c.active
+                    ? "ACTIVE"
+                    : c.approvedAt
+                      ? "SUSPENDED"
+                      : "PENDING_APPROVAL"
+                }
+              />
               <div style={{ marginTop: 15 }}>
                 <ActionButton
                   endpoint={`/api/centers/${c.id}`}
@@ -1242,7 +1353,11 @@ export function Workspace({
                   body={{ active: !c.active }}
                   confirm
                 >
-                  {c.active ? "Suspend" : "Activate"}
+                  {c.active
+                    ? "Suspend"
+                    : c.approvedAt
+                      ? "Activate"
+                      : "Approve center"}
                 </ActionButton>
               </div>
             </article>
@@ -1328,14 +1443,14 @@ export function Workspace({
                 { name: "name", label: "Part name" },
                 {
                   name: "cost",
-                  label: "Unit cost (minor units)",
-                  type: "number",
+                  label: "Unit cost (LKR)",
+                  type: "money",
                   min: 0,
                 },
                 {
                   name: "price",
-                  label: "Selling price (minor units)",
-                  type: "number",
+                  label: "Selling price (LKR)",
+                  type: "money",
                   min: 0,
                 },
                 {

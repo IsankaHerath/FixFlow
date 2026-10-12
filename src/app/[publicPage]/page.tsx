@@ -5,13 +5,26 @@ import { AuthForm } from "@/components/auth-form";
 import { Brand } from "@/components/brand";
 import { db } from "@/lib/db";
 import { money } from "@/lib/utils";
+import { PublicInfo } from "@/components/public-info";
 export const dynamic = "force-dynamic";
 export default async function PublicPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ publicPage: string }>;
+  searchParams: Promise<{ q?: string; district?: string }>;
 }) {
   const { publicPage } = await params;
+  if (
+    [
+      "features",
+      "how-it-works",
+      "for-customers",
+      "for-service-centers",
+    ].includes(publicPage)
+  )
+    return <PublicInfo page={publicPage} />;
+  const search = await searchParams;
   if (
     ["login", "register", "forgot-password", "reset-password"].includes(
       publicPage,
@@ -32,7 +45,25 @@ export default async function PublicPage({
   const centers =
     publicPage === "service-centers"
       ? await db.serviceCenter.findMany({
-          where: { active: true },
+          where: {
+            active: true,
+            ...(search.q
+              ? {
+                  name: {
+                    contains: search.q.slice(0, 100),
+                    mode: "insensitive" as const,
+                  },
+                }
+              : {}),
+            ...(search.district
+              ? {
+                  district: {
+                    contains: search.district.slice(0, 100),
+                    mode: "insensitive" as const,
+                  },
+                }
+              : {}),
+          },
           include: { services: { where: { active: true } } },
           take: 100,
         })
@@ -56,11 +87,30 @@ export default async function PublicPage({
               Explore services and book a time that works for you. Starting
               prices are indicative; final repair charges require your approval.
             </p>
+            <form
+              method="GET"
+              className="form-grid"
+              style={{ marginBottom: 25 }}
+            >
+              <label className="field">
+                Center name
+                <input name="q" defaultValue={search.q} />
+              </label>
+              <label className="field">
+                District
+                <input name="district" defaultValue={search.district} />
+              </label>
+              <button className="button button-primary" type="submit">
+                Find centers
+              </button>
+            </form>
             <div className="form-stack">
               {centers.length ? (
                 centers.map((c) => (
                   <article key={c.id} className="center-card">
-                    <h2>{c.name}</h2>
+                    <h2>
+                      <Link href={`/service-centers/${c.id}`}>{c.name} ↗</Link>
+                    </h2>
                     <p>{c.description}</p>
                     <p>
                       {c.address} · {c.district}

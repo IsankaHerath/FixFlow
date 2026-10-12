@@ -4,7 +4,19 @@ import {
   validateTransition,
   validateSlot,
   reminderState,
+  peakOverlap,
 } from "../../src/server/rules";
+import { parseMoney, moneyInput } from "../../src/lib/money";
+describe("LKR entry", () => {
+  it("converts cents exactly and rejects fractions smaller than a cent", () => {
+    expect(parseMoney("1234.56")).toBe(123456);
+    expect(parseMoney("0.29")).toBe(29);
+    expect(moneyInput(29)).toBe("0.29");
+    expect(() => parseMoney("1.001")).toThrow();
+    expect(() => parseMoney("-1")).toThrow();
+    expect(() => parseMoney("1e5")).toThrow();
+  });
+});
 describe("money calculations", () => {
   it("rounds half-up using exact integer arithmetic", () => {
     expect(totals([{ quantity: 3, unitPrice: 199 }], 97, 1500)).toEqual({
@@ -34,6 +46,30 @@ describe("repair lifecycle", () => {
   });
 });
 describe("appointment slots", () => {
+  it("counts simultaneous occupancy rather than all overlapping visits", () => {
+    const at = (hour: number) =>
+      new Date(`2026-10-02T${hour.toString().padStart(2, "0")}:00:00Z`);
+    expect(
+      peakOverlap(
+        [
+          { startsAt: at(9), endsAt: at(10) },
+          { startsAt: at(10), endsAt: at(11) },
+        ],
+        at(9),
+        at(11),
+      ),
+    ).toBe(1);
+    expect(
+      peakOverlap(
+        [
+          { startsAt: at(9), endsAt: at(11) },
+          { startsAt: at(10), endsAt: at(12) },
+        ],
+        at(9),
+        at(12),
+      ),
+    ).toBe(2);
+  });
   const center = {
     timezone: "Asia/Colombo",
     openHour: 8,

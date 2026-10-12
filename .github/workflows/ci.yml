@@ -1,0 +1,60 @@
+name: Verify FixFlow
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: fixflow
+          POSTGRES_PASSWORD: ephemeral-ci-only
+          POSTGRES_DB: fixflow_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U fixflow -d fixflow_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://fixflow:ephemeral-ci-only@localhost:5432/fixflow_test
+      BETTER_AUTH_URL: http://localhost:3000
+      ALLOW_DEMO_SEED: "true"
+      RUN_INTEGRATION: "true"
+      PLAYWRIGHT_CHANNEL: chromium
+      MAIL_FROM: FixFlow <noreply@example.test>
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Generate ephemeral test secrets
+        run: |
+          echo "BETTER_AUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "CRON_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "DEMO_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run db:migrate
+      - run: npx prisma validate
+      - run: npx prisma migrate status
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run db:seed
+      - run: npx playwright install --with-deps chromium
+      - name: Browser tests
+        run: |
+          npm run dev > /tmp/fixflow-next.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://localhost:3000/ > /dev/null; then break; fi
+            sleep 2
+          done
+          npm run test:e2e
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-failures
+          path: test-results/
